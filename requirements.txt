@@ -1,0 +1,8 @@
+streamlit==1.31.0
+openai>=1.55.0
+pandas>=2.2.0
+openpyxl==3.1.2
+geopy==2.4.1
+pgeocode==0.4.1
+gspread==5.12.4
+oauth2client==4.1.3
