@@ -299,23 +299,149 @@ if st.session_state.step == "rank":
 
 
 # =======================================
-# STEP 5 — RESULTS
+# STEP 5 – RESULTS WITH AI EXPLANATIONS
 # =======================================
 if st.session_state.step == "results":
-    st.header("Step 5: Top Recommendations")
+    st.header("🏆 Step 5: Top Recommendations")
 
     df = st.session_state.results
-    st.success("🎉 Top Community Matches Ready!")
+    prefs = st.session_state.preferences
+    
+    st.success(f"🎉 Found {len(df)} matching communities!")
+    
+    # Display client summary
+    with st.expander("👤 Client Summary", expanded=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Patient Name", prefs.get("name_of_patient", "N/A"))
+            st.metric("Age", prefs.get("age_of_patient", "N/A"))
+        with col2:
+            st.metric("Care Level", prefs.get("care_level", "N/A"))
+            st.metric("Max Budget", f"${prefs.get('max_budget', 'N/A')}")
+        with col3:
+            locations = prefs.get("preferred_location", [])
+            if isinstance(locations, list):
+                st.metric("Preferred Areas", len(locations))
+                st.caption(", ".join(locations))
+            else:
+                st.metric("Preferred Area", locations)
+
+    st.subheader("🏅 Top 5 Community Matches")
 
     top5 = df.head(5)
 
-    for idx, r in top5.iterrows():
-        with st.expander(f"{idx+1}. {r.get('Type of Service')}"):
-            st.write(r)
+    for idx, (_, row) in enumerate(top5.iterrows(), 1):
+        with st.expander(f"#{idx} - {row.get('Type of Service', 'N/A')} | Priority Level {int(row.get('Priority_Level', 0))}", expanded=(idx <= 3)):
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown(f"### 📍 Location & Details")
+                st.write(f"**Town:** {row.get('Town', 'N/A')}, {row.get('State', 'N/A')}")
+                if pd.notna(row.get('Distance_miles')):
+                    st.write(f"**Distance:** {round(row['Distance_miles'], 1)} miles from preferred location")
+                st.write(f"**Service Type:** {row.get('Type of Service', 'N/A')}")
+                st.write(f"**Apartment Type:** {row.get('Apartment Type', 'N/A')}")
+                
+            with col2:
+                st.markdown(f"### 💰 Pricing")
+                if pd.notna(row.get('Monthly Fee')):
+                    st.metric("Monthly Fee", f"${int(row['Monthly Fee']):,}")
+                else:
+                    st.metric("Monthly Fee", "Contact for pricing")
+                st.metric("Priority", int(row.get('Priority_Level', 0)))
+            
+            # Generate AI explanation
+            if api_key:
+                try:
+                    with st.spinner("Generating personalized match explanation..."):
+                        client = OpenAI(api_key=api_key)
+                        
+                        prompt = f"""As a senior living placement advisor, explain in 2-3 concise sentences why this community is an excellent match for the client.
 
-    st.download_button(
-        "Download All Results (CSV)",
-        df.to_csv(index=False),
-        "community_results.csv",
-        "text/csv"
-    )
+Client Needs:
+- Care Level: {prefs.get('care_level')}
+- Budget: ${prefs.get('max_budget')}
+- Preferred Location: {prefs.get('preferred_location')}
+- Special Requirements: Enhanced={prefs.get('enhanced')}, Enriched={prefs.get('enriched')}
+
+Community Details:
+- Type: {row.get('Type of Service')}
+- Location: {row.get('Town')}, {row.get('State')}
+- Monthly Fee: ${row.get('Monthly Fee')}
+- Distance: {round(row.get('Distance_miles', 0), 1)} miles
+- Priority Level: {row.get('Priority_Level')}
+
+Focus on: care level match, location convenience, value proposition, and any special features."""
+                        
+                        response = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0.5,
+                            max_tokens=200
+                        )
+                        
+                        explanation = response.choices[0].message.content
+                        st.info(f"**🎯 Why This Community Matches:** {explanation}")
+                        
+                except Exception as e:
+                    st.warning(f"Could not generate explanation: {str(e)}")
+            
+            # Additional details section
+            with st.expander("📋 More Details"):
+                details_col1, details_col2 = st.columns(2)
+                with details_col1:
+                    st.write(f"**Enhanced:** {row.get('Enhanced', 'N/A')}")
+                    st.write(f"**Enriched:** {row.get('Enriched', 'N/A')}")
+                    st.write(f"**Contract Status:** {row.get('Contract (w rate)?', 'N/A')}")
+                with details_col2:
+                    st.write(f"**Works with Placement:** {row.get('Work with Placement?', 'N/A')}")
+                    st.write(f"**Est. Waitlist:** {row.get('Est. Waitlist Length', 'N/A')}")
+                    st.write(f"**Community ID:** {row.get('CommunityID', 'N/A')}")
+
+    # Download section
+    st.subheader("📥 Download Results")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Prepare top 5 for download
+        top5_download = top5[[col for col in ['Type of Service', 'Town', 'State', 'Monthly Fee', 
+                                                'Distance_miles', 'Priority_Level', 'Apartment Type',
+                                                'Enhanced', 'Enriched', 'CommunityID'] if col in top5.columns]]
+        
+        csv_top5 = top5_download.to_csv(index=False)
+        st.download_button(
+            label="📄 Download Top 5 Recommendations (CSV)",
+            data=csv_top5,
+            file_name=f"top5_recommendations_{prefs.get('name_of_patient', 'client')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    with col2:
+        csv_all = df.to_csv(index=False)
+        st.download_button(
+            label="📊 Download All Matching Communities (CSV)",
+            data=csv_all,
+            file_name=f"all_matches_{prefs.get('name_of_patient', 'client')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    # Statistics
+    st.subheader("📈 Matching Statistics")
+    stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+    
+    with stat_col1:
+        st.metric("Total Matches", len(df))
+    with stat_col2:
+        priority1 = len(df[df['Priority_Level'] == 1])
+        st.metric("Priority 1 Communities", priority1)
+    with stat_col3:
+        if 'Distance_miles' in df.columns:
+            avg_distance = df['Distance_miles'].mean()
+            st.metric("Avg Distance", f"{avg_distance:.1f} mi" if pd.notna(avg_distance) else "N/A")
+    with stat_col4:
+        if 'Monthly Fee' in df.columns:
+            avg_price = df['Monthly Fee'].mean()
+            st.metric("Avg Monthly Fee", f"${int(avg_price):,}" if pd.notna(avg_price) else "N/A")
