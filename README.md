@@ -100,6 +100,7 @@ cd <your-repo>
 ## 🛠️ Installation
 
 ---
+
 ### **2. Create a Virtual Environment**
 ```bash
 python3 -m venv env
@@ -107,6 +108,7 @@ source env/bin/activate       # Mac/Linux
 env\Scripts\activate          # Windows
 
 ---
+
 3. Install Dependencies
 bash
 Copy code
