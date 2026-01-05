@@ -199,6 +199,6 @@ Peng
 Maeve
 
 📜 License
-MIT License (or your preferred license)
+
 
 
